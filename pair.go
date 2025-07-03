@@ -155,3 +155,10 @@ func (p *Pair[IP]) checkRedirectRule(dstIP IP, dstPort uint16) (IP, uint16, bool
 	}
 	return dstIP, dstPort, false
 }
+
+// updateLastSeen safely updates the LastSeen field of a connection
+func (p *Pair[IP]) updateLastSeen(conn *Conn[IP], now int64) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	conn.LastSeen = now
+}

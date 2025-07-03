@@ -248,7 +248,7 @@ func TestConnectionExpiry(t *testing.T) {
 	
 	// Wait for expiry
 	time.Sleep(2 * time.Second)
-	table.Cleanup(time.Now().Unix())
+	table.RunMaintenance(time.Now().Unix())
 	
 	// Late response should fail
 	lateResponse := swnat.CreateIPv4UDPPacket(server, header.SourceIP, 53, udp.SourcePort, []byte("late"))
@@ -334,8 +334,8 @@ func TestComplexScenario(t *testing.T) {
 	}
 	
 	// Verify active connections
-	table.Cleanup(time.Now().Unix())
-	t.Log("Cleanup completed")
+	table.RunMaintenance(time.Now().Unix())
+	t.Log("Maintenance completed")
 }
 
 func TestChecksumValidation(t *testing.T) {

@@ -391,7 +391,7 @@ func (t *Table[IP]) handleInboundTCP(packet []byte, ipHeader *IPv4Header, ipHead
 	}
 
 	// Update last seen
-	conn.LastSeen = now
+	t.TCP.updateLastSeen(conn, now)
 
 	// Rewrite packet to restore original addresses
 	ipHeader.DestinationIP = any(conn.LocalSrcIP).(IPv4)
@@ -444,7 +444,7 @@ func (t *Table[IP]) handleInboundUDP(packet []byte, ipHeader *IPv4Header, ipHead
 	}
 
 	// Update last seen
-	conn.LastSeen = now
+	t.UDP.updateLastSeen(conn, now)
 
 	// Rewrite packet to restore original addresses
 	ipHeader.DestinationIP = any(conn.LocalSrcIP).(IPv4)
@@ -486,8 +486,8 @@ func (t *Table[IP]) handleInboundICMP(packet []byte, ipHeader *IPv4Header, ipHea
 
 		// For ICMP echo replies, we match on ID
 		externalKey := ExternalKey[IP]{
-			SrcIP:   any(ipHeader.DestinationIP).(IP),
-			DstIP:   any(ipHeader.SourceIP).(IP),
+			SrcIP:   any(ipHeader.SourceIP).(IP),
+			DstIP:   any(ipHeader.DestinationIP).(IP),
 			SrcPort: 0,
 			DstPort: icmpHeader.ID,
 		}
@@ -500,7 +500,7 @@ func (t *Table[IP]) handleInboundICMP(packet []byte, ipHeader *IPv4Header, ipHea
 		}
 
 		// Update last seen
-		conn.LastSeen = now
+		t.ICMP.updateLastSeen(conn, now)
 
 		// Rewrite packet to restore original addresses and ID
 		ipHeader.DestinationIP = any(conn.LocalSrcIP).(IPv4)
@@ -535,9 +535,10 @@ func (t *Table[IP]) handleInboundICMP(packet []byte, ipHeader *IPv4Header, ipHea
 	}
 }
 
-// Cleanup removes expired connections from the NAT table.
+// RunMaintenance removes expired connections from the NAT table.
+// This should be called periodically to clean up stale connections.
 // Connections are considered expired based on configurable protocol-specific timeouts.
-func (t *Table[IP]) Cleanup(now int64) {
+func (t *Table[IP]) RunMaintenance(now int64) {
 	t.TCP.cleanupExpired(now, t.TCPTimeout)
 	t.UDP.cleanupExpired(now, t.UDPTimeout)
 	t.ICMP.cleanupExpired(now, t.ICMPTimeout)

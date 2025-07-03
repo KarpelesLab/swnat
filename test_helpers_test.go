@@ -103,7 +103,7 @@ func VerifyIPv4Checksum(packet []byte) bool {
 	if len(packet) < 20 {
 		return false
 	}
-	return calculateIPv4Checksum(packet[:20]) == 0xFFFF
+	return calculateIPv4Checksum(packet[:20]) == 0
 }
 
 func VerifyTCPChecksum(packet []byte) bool {
@@ -113,7 +113,7 @@ func VerifyTCPChecksum(packet []byte) bool {
 	srcIP := IPv4{packet[12], packet[13], packet[14], packet[15]}
 	dstIP := IPv4{packet[16], packet[17], packet[18], packet[19]}
 	tcpLen := len(packet) - 20
-	return calculateTCPChecksum(srcIP, dstIP, packet[20:20+tcpLen]) == 0xFFFF
+	return calculateTCPChecksum(srcIP, dstIP, packet[20:20+tcpLen]) == 0
 }
 
 func VerifyUDPChecksum(packet []byte) bool {
@@ -123,5 +123,5 @@ func VerifyUDPChecksum(packet []byte) bool {
 	srcIP := IPv4{packet[12], packet[13], packet[14], packet[15]}
 	dstIP := IPv4{packet[16], packet[17], packet[18], packet[19]}
 	udpLen := len(packet) - 20
-	return calculateUDPChecksum(srcIP, dstIP, packet[20:20+udpLen]) == 0xFFFF
+	return calculateUDPChecksum(srcIP, dstIP, packet[20:20+udpLen]) == 0
 }

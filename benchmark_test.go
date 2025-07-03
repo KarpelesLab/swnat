@@ -116,7 +116,7 @@ func BenchmarkConcurrentNAT(b *testing.B) {
 	})
 }
 
-func BenchmarkCleanup(b *testing.B) {
+func BenchmarkRunMaintenance(b *testing.B) {
 	for _, size := range []int{100, 1000, 10000} {
 		b.Run(fmt.Sprintf("size-%d", size), func(b *testing.B) {
 			publicIP := net.ParseIP("1.2.3.4")
@@ -140,7 +140,7 @@ func BenchmarkCleanup(b *testing.B) {
 				time.Sleep(2 * time.Second)
 				
 				b.StartTimer()
-				table.Cleanup(time.Now().Unix())
+				table.RunMaintenance(time.Now().Unix())
 			}
 		})
 	}
@@ -188,8 +188,8 @@ func BenchmarkMemoryUsage(b *testing.B) {
 			}
 			
 			b.StartTimer()
-			// Measure cleanup time
-			table.Cleanup(time.Now().Unix())
+			// Measure maintenance time
+			table.RunMaintenance(time.Now().Unix())
 		}
 	})
 }

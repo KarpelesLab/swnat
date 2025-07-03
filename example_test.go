@@ -51,12 +51,12 @@ func ExampleTable_Cleanup() {
 	externalIP := net.ParseIP("192.168.1.1")
 	nat := swnat.NewIPv4(externalIP)
 
-	// Recommended method for periodic cleanup
+	// Recommended method for periodic maintenance
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for now := range ticker.C {
-			nat.Cleanup(now.Unix())
+			nat.RunMaintenance(now.Unix())
 		}
 	}()
 

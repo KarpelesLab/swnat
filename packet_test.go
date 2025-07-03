@@ -257,10 +257,10 @@ func TestCalculateIPv4Checksum(t *testing.T) {
 	// Set the checksum
 	binary.BigEndian.PutUint16(header[10:12], checksum)
 	
-	// Verify checksum is correct by recomputing (should be 0xFFFF)
+	// Verify checksum is correct by recomputing (should be 0)
 	verify := calculateIPv4Checksum(header)
-	if verify != 0xFFFF {
-		t.Errorf("Checksum verification failed: got %x, want 0xFFFF", verify)
+	if verify != 0 {
+		t.Errorf("Checksum verification failed: got %x, want 0", verify)
 	}
 }
 

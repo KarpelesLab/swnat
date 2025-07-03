@@ -80,7 +80,7 @@ func main() {
         ticker := time.NewTicker(30 * time.Second)
         defer ticker.Stop()
         for now := range ticker.C {
-            nat.Cleanup(now.Unix())
+            nat.RunMaintenance(now.Unix())
         }
     }()
 }
@@ -155,7 +155,7 @@ if table, ok := nat.(*swnat.Table[swnat.IPv4]); ok {
 
 3. **Connection Tracking**: The library maintains connection state for all active flows, allowing proper translation of return traffic.
 
-4. **Connection Cleanup**: Expired connections are removed based on protocol-specific timeouts:
+4. **Connection Maintenance**: Expired connections are removed during periodic maintenance based on protocol-specific timeouts:
    - TCP: 24 hours (or immediately on next cleanup after FIN/RST)
    - UDP: 3 minutes  
    - ICMP: 30 seconds

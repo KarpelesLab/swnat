@@ -227,7 +227,7 @@ func TestIPv4TableDropRule(t *testing.T) {
 	}
 }
 
-func TestIPv4TableCleanup(t *testing.T) {
+func TestIPv4TableMaintenance(t *testing.T) {
 	publicIP := net.ParseIP("1.2.3.4")
 	table := NewIPv4(publicIP)
 	ipv4Table := table.(*Table[IPv4])
@@ -245,9 +245,9 @@ func TestIPv4TableCleanup(t *testing.T) {
 	// Wait for expiration
 	time.Sleep(2 * time.Second)
 	
-	// Run cleanup
+	// Run maintenance
 	now := time.Now().Unix()
-	table.Cleanup(now)
+	table.RunMaintenance(now)
 	
 	// Try to send inbound packet - should fail
 	header, _ := ParseIPv4Header(packet)
@@ -303,7 +303,7 @@ func TestIPv4TableConcurrency(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 5; i++ {
-			table.Cleanup(time.Now().Unix())
+			table.RunMaintenance(time.Now().Unix())
 			time.Sleep(10 * time.Millisecond)
 		}
 	}()

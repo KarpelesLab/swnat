@@ -57,7 +57,7 @@ The project includes GitHub Actions workflow (`.github/workflows/test.yml`) that
 - IPv4/IPv6 address parsing and formatting
 - Packet header parsing (IPv4, TCP, UDP, ICMP)
 - NAT translation (outbound and inbound)
-- Connection tracking and cleanup
+- Connection tracking and maintenance
 - Namespace isolation and limits
 
 ### Advanced Features
@@ -73,7 +73,7 @@ The project includes GitHub Actions workflow (`.github/workflows/test.yml`) that
 - NAT translation throughput
 - Concurrent connection handling
 - Memory usage with large connection tables
-- Cleanup performance
+- Maintenance performance
 
 ## Known Test Failures
 
