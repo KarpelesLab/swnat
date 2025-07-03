@@ -15,6 +15,8 @@ A pure Go implementation of a software NAT (Network Address Translation) engine 
 - Packet checksum recalculation
 - Configurable time source for performance optimization
 - Automatic cleanup of expired connections
+- Per-namespace connection limits with LRU eviction
+- TCP session state tracking (automatic cleanup on FIN/RST)
 
 ## Installation
 
@@ -100,6 +102,19 @@ if table, ok := nat.(*swnat.Table[swnat.IPv4]); ok {
 }
 ```
 
+### Connection Limits
+
+You can configure the maximum connections per namespace:
+
+```go
+if table, ok := nat.(*swnat.Table[swnat.IPv4]); ok {
+    // Set maximum 500 connections per namespace
+    table.MaxConnPerNamespace = 500
+}
+```
+
+When the limit is reached, the oldest connection (by last activity) will be evicted to make room for new connections.
+
 ## How It Works
 
 1. **Outbound Packets**: When a packet from inside the NAT needs to go out:
@@ -118,9 +133,11 @@ if table, ok := nat.(*swnat.Table[swnat.IPv4]); ok {
 3. **Connection Tracking**: The library maintains connection state for all active flows, allowing proper translation of return traffic.
 
 4. **Connection Cleanup**: Expired connections are removed based on protocol-specific timeouts:
-   - TCP: 24 hours
+   - TCP: 24 hours (or immediately on next cleanup after FIN/RST)
    - UDP: 3 minutes  
    - ICMP: 30 seconds
+
+5. **Connection Limits**: Each namespace has a configurable maximum connection limit (default: 200). When reached, the oldest connection is evicted using LRU policy.
 
 ## Architecture
 

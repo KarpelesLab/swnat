@@ -17,9 +17,39 @@ func (p *Pair[IP]) lookupInbound(key ExternalKey[IP]) *Conn[IP] {
 	return p.in[key]
 }
 
-func (p *Pair[IP]) addConnection(conn *Conn[IP]) {
+func (p *Pair[IP]) addConnection(conn *Conn[IP], maxPerNamespace int) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
+
+	// Check if we need to evict old connections from this namespace
+	if maxPerNamespace > 0 {
+		count := 0
+		var oldest *Conn[IP]
+		var oldestKey InternalKey[IP]
+
+		// Count connections in this namespace and find oldest
+		for key, c := range p.out {
+			if key.Namespace == conn.Namespace && !c.PendingSweep {
+				count++
+				if oldest == nil || c.LastSeen < oldest.LastSeen {
+					oldest = c
+					oldestKey = key
+				}
+			}
+		}
+
+		// If we're at the limit, remove the oldest connection
+		if count >= maxPerNamespace && oldest != nil {
+			externalKey := ExternalKey[IP]{
+				SrcIP:   oldest.OutsideDstIP,
+				DstIP:   oldest.OutsideSrcIP,
+				SrcPort: oldest.OutsideDstPort,
+				DstPort: oldest.OutsideSrcPort,
+			}
+			delete(p.out, oldestKey)
+			delete(p.in, externalKey)
+		}
+	}
 
 	// Create keys
 	internalKey := InternalKey[IP]{
@@ -72,7 +102,7 @@ func (p *Pair[IP]) cleanupExpired(now int64, timeout int64) {
 	// Collect connections to remove
 	var toRemove []*Conn[IP]
 	for _, conn := range p.out {
-		if now-conn.LastSeen > timeout {
+		if conn.PendingSweep || (now-conn.LastSeen > timeout) {
 			toRemove = append(toRemove, conn)
 		}
 	}

@@ -30,6 +30,7 @@ type Conn[IP comparable] struct {
 
 	// special flags
 	RewriteDestination bool
+	PendingSweep       bool // Mark connection for immediate removal (e.g. TCP FIN/RST)
 }
 
 type ExternalKey[IP comparable] struct {

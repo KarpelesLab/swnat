@@ -22,13 +22,19 @@ type Table[IP comparable] struct {
 	// Now is a function that returns the current time in Unix seconds.
 	// Defaults to time.Now().Unix() but can be overridden for performance.
 	Now func() int64
+
+	// MaxConnPerNamespace is the maximum number of connections allowed per namespace.
+	// When this limit is reached, oldest connections will be removed.
+	// Defaults to 200.
+	MaxConnPerNamespace int
 }
 
 func NewIPv4(externalIP net.IP) NAT {
 	t := &Table[IPv4]{
-		nextPort: 49152,
-		maxPort:  65535,
-		Now:      func() int64 { return time.Now().Unix() },
+		nextPort:            49152,
+		maxPort:             65535,
+		Now:                 func() int64 { return time.Now().Unix() },
+		MaxConnPerNamespace: 200,
 	}
 
 	// Convert net.IP to IPv4
@@ -124,7 +130,7 @@ func (t *Table[IP]) handleOutboundTCP(packet []byte, ipHeader *IPv4Header, ipHea
 			OutsideDstIP:   any(ipHeader.DestinationIP).(IP),
 			OutsideDstPort: tcpHeader.DestinationPort,
 		}
-		t.TCP.addConnection(conn)
+		t.TCP.addConnection(conn, t.MaxConnPerNamespace)
 	} else {
 		conn.LastSeen = now
 	}
@@ -142,6 +148,12 @@ func (t *Table[IP]) handleOutboundTCP(packet []byte, ipHeader *IPv4Header, ipHea
 	binary.BigEndian.PutUint16(tcpData[16:18], 0) // Clear checksum
 	checksum := calculateTCPChecksum(ipHeader.SourceIP, ipHeader.DestinationIP, tcpData)
 	binary.BigEndian.PutUint16(tcpData[16:18], checksum)
+
+	// Check if this is a connection termination (FIN or RST)
+	if tcpHeader.Flags&(TCPFlagFIN|TCPFlagRST) != 0 {
+		// Mark connection for immediate removal on next cleanup
+		conn.PendingSweep = true
+	}
 
 	return nil
 }
@@ -179,7 +191,7 @@ func (t *Table[IP]) handleOutboundUDP(packet []byte, ipHeader *IPv4Header, ipHea
 			OutsideDstIP:   any(ipHeader.DestinationIP).(IP),
 			OutsideDstPort: udpHeader.DestinationPort,
 		}
-		t.UDP.addConnection(conn)
+		t.UDP.addConnection(conn, t.MaxConnPerNamespace)
 	} else {
 		conn.LastSeen = now
 	}
@@ -234,7 +246,7 @@ func (t *Table[IP]) handleOutboundICMP(packet []byte, ipHeader *IPv4Header, ipHe
 			OutsideDstIP:   any(ipHeader.DestinationIP).(IP),
 			OutsideDstPort: 0,
 		}
-		t.ICMP.addConnection(conn)
+		t.ICMP.addConnection(conn, t.MaxConnPerNamespace)
 	} else {
 		conn.LastSeen = now
 	}
@@ -316,6 +328,12 @@ func (t *Table[IP]) handleInboundTCP(packet []byte, ipHeader *IPv4Header, ipHead
 	binary.BigEndian.PutUint16(tcpData[16:18], 0) // Clear checksum
 	checksum := calculateTCPChecksum(ipHeader.SourceIP, ipHeader.DestinationIP, tcpData)
 	binary.BigEndian.PutUint16(tcpData[16:18], checksum)
+
+	// Check if this is a connection termination (FIN or RST)
+	if tcpHeader.Flags&(TCPFlagFIN|TCPFlagRST) != 0 {
+		// Mark connection for immediate removal on next cleanup
+		conn.PendingSweep = true
+	}
 
 	return conn.Namespace, nil
 }

@@ -60,3 +60,18 @@ func ExampleTable_Cleanup() {
 		table.Now = func() int64 { return currentTime }
 	}
 }
+
+func ExampleTable_MaxConnPerNamespace() {
+	// Create a new IPv4 NAT table
+	externalIP := net.ParseIP("192.168.1.1")
+	nat := swnat.NewIPv4(externalIP)
+
+	// Configure connection limits
+	if table, ok := nat.(*swnat.Table[swnat.IPv4]); ok {
+		// Increase the maximum connections per namespace from default 200 to 500
+		table.MaxConnPerNamespace = 500
+	}
+
+	// The NAT will now allow up to 500 connections per namespace
+	// When this limit is reached, the oldest connection will be evicted
+}

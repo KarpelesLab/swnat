@@ -9,6 +9,14 @@ const (
 	ProtocolICMP = 1
 	ProtocolTCP  = 6
 	ProtocolUDP  = 17
+
+	// TCP flags
+	TCPFlagFIN = 0x01
+	TCPFlagSYN = 0x02
+	TCPFlagRST = 0x04
+	TCPFlagPSH = 0x08
+	TCPFlagACK = 0x10
+	TCPFlagURG = 0x20
 )
 
 type IPv4Header struct {
