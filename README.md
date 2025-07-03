@@ -74,10 +74,10 @@ func main() {
     
     // Periodically cleanup expired connections
     go func() {
-        ticker := time.NewTicker(60 * time.Second)
+        ticker := time.NewTicker(30 * time.Second)
         defer ticker.Stop()
-        for range ticker.C {
-            nat.Cleanup(time.Now().Unix())
+        for now := range ticker.C {
+            nat.Cleanup(now.Unix())
         }
     }()
 }

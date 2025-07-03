@@ -3,6 +3,7 @@ package swnat_test
 import (
 	"fmt"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/KarpelesLab/swnat"
@@ -50,14 +51,26 @@ func ExampleTable_Cleanup() {
 	externalIP := net.ParseIP("192.168.1.1")
 	nat := swnat.NewIPv4(externalIP)
 
-	// Perform regular cleanup of expired connections
-	currentTime := time.Now().Unix()
-	nat.Cleanup(currentTime)
+	// Recommended method for periodic cleanup
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for now := range ticker.C {
+			nat.Cleanup(now.Unix())
+		}
+	}()
 
 	// For performance optimization, you can provide a custom time source
 	if table, ok := nat.(*swnat.Table[swnat.IPv4]); ok {
-		// Use a cached time value that updates less frequently
-		table.Now = func() int64 { return currentTime }
+		var currentTime int64
+		// Update time less frequently
+		go func() {
+			for {
+				atomic.StoreInt64(&currentTime, time.Now().Unix())
+				time.Sleep(time.Second)
+			}
+		}()
+		table.Now = func() int64 { return atomic.LoadInt64(&currentTime) }
 	}
 }
 
