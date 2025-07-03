@@ -173,12 +173,9 @@ if table, ok := nat.(*swnat.Table[swnat.IPv4]); ok {
 
 - IPv6 support (structure already in place)
 - Port forwarding/DNAT capabilities
-- Statistics and monitoring
+- Connection statistics and monitoring
 - ICMP error message handling (Type 3 - Destination Unreachable)
 - Connection state tracking (SYN, ESTABLISHED, etc.)
-- Rate limiting per namespace
-- JSON/YAML configuration file support
-- Prometheus metrics export
 
 ## License
 
