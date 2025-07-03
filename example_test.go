@@ -2,19 +2,15 @@ package swnat_test
 
 import (
 	"fmt"
+	"net"
 
 	"github.com/KarpelesLab/swnat"
 )
 
 func ExampleTable() {
-	// Create a new IPv4 NAT table
-	nat := swnat.NewIPv4()
-
-	// If using Table directly, set the external IP
-	if table, ok := nat.(*swnat.Table[swnat.IPv4]); ok {
-		externalIP := swnat.IPv4{192, 168, 1, 1}
-		table.SetExternalIP(externalIP)
-	}
+	// Create a new IPv4 NAT table with external IP
+	externalIP := net.ParseIP("192.168.1.1")
+	nat := swnat.NewIPv4(externalIP)
 
 	// Example packet (simplified for demonstration)
 	// In real usage, this would be an actual IP packet

@@ -27,18 +27,14 @@ package main
 
 import (
     "log"
+    "net"
     "github.com/KarpelesLab/swnat"
 )
 
 func main() {
-    // Create a new IPv4 NAT table
-    nat := swnat.NewIPv4()
-    
-    // Set the external IP address for NAT
-    if table, ok := nat.(*swnat.Table[swnat.IPv4]); ok {
-        externalIP, _ := swnat.ParseIPv4("203.0.113.1")
-        table.SetExternalIP(externalIP)
-    }
+    // Create a new IPv4 NAT table with external IP
+    externalIP := net.ParseIP("203.0.113.1")
+    nat := swnat.NewIPv4(externalIP)
     
     // Process outbound packet
     packet := getPacketFromInterface() // Your packet capture logic

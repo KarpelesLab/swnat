@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"net"
 	"sync/atomic"
 	"time"
 )
@@ -19,11 +20,19 @@ type Table[IP comparable] struct {
 	maxPort     uint32
 }
 
-func NewIPv4() NAT {
+func NewIPv4(externalIP net.IP) NAT {
 	t := &Table[IPv4]{
 		nextPort: 49152,
 		maxPort:  65535,
 	}
+
+	// Convert net.IP to IPv4
+	if ip4 := externalIP.To4(); ip4 != nil {
+		copy(t.externalIP[:], ip4)
+	} else {
+		panic("NewIPv4: provided IP is not a valid IPv4 address")
+	}
+
 	t.TCP.init()
 	t.UDP.init()
 	t.ICMP.init()
