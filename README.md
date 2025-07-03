@@ -1,5 +1,7 @@
 # swnat - Software NAT Library for Go
 
+[![GoDoc](https://godoc.org/github.com/KarpelesLab/swnat?status.svg)](https://godoc.org/github.com/KarpelesLab/swnat)
+
 A pure Go implementation of a software NAT (Network Address Translation) engine with support for TCP, UDP, and ICMP protocols.
 
 ## Features
