@@ -17,6 +17,9 @@ A pure Go implementation of a software NAT (Network Address Translation) engine 
 - Automatic cleanup of expired connections
 - Per-namespace connection limits with LRU eviction
 - TCP session state tracking (automatic cleanup on FIN/RST)
+- Traffic filtering rules (drop packets to specific ports)
+- Destination rewrite rules (redirect traffic to different IPs/ports)
+- Configurable protocol timeouts
 
 ## Installation
 
@@ -114,6 +117,26 @@ if table, ok := nat.(*swnat.Table[swnat.IPv4]); ok {
 ```
 
 When the limit is reached, the oldest connection (by last activity) will be evicted to make room for new connections.
+
+### Traffic Filtering and Redirection
+
+```go
+// Cast to access IPv4-specific methods
+if table, ok := nat.(*swnat.Table[swnat.IPv4]); ok {
+    // Drop all SMTP traffic (port 25)
+    table.AddDropRule(swnat.ProtocolTCP, 25)
+    
+    // Redirect DNS traffic from 10.0.0.243:53 to 10.7.0.0:5353
+    dnsOrigIP, _ := swnat.ParseIPv4("10.0.0.243")
+    dnsNewIP, _ := swnat.ParseIPv4("10.7.0.0")
+    table.AddRedirectRule(swnat.ProtocolUDP, dnsOrigIP, 53, dnsNewIP, 5353)
+    
+    // Configure custom timeouts
+    table.TCPTimeout = 3600  // 1 hour
+    table.UDPTimeout = 300   // 5 minutes
+    table.ICMPTimeout = 60   // 1 minute
+}
+```
 
 ## How It Works
 

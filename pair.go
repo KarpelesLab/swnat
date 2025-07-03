@@ -128,3 +128,30 @@ func (p *Pair[IP]) cleanupExpired(now int64, timeout int64) {
 		delete(p.in, externalKey)
 	}
 }
+
+// checkDropRule checks if a packet should be dropped based on drop rules
+func (p *Pair[IP]) checkDropRule(dstPort uint16) bool {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+
+	for _, rule := range p.dropRules {
+		if rule.DstPort == dstPort {
+			return true
+		}
+	}
+	return false
+}
+
+// checkRedirectRule checks if a packet should be redirected
+// Returns newDstIP, newDstPort, shouldRedirect
+func (p *Pair[IP]) checkRedirectRule(dstIP IP, dstPort uint16) (IP, uint16, bool) {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+
+	for _, rule := range p.redirectRules {
+		if rule.DstPort == dstPort && rule.DstIP == dstIP {
+			return rule.NewDstIP, rule.NewDstPort, true
+		}
+	}
+	return dstIP, dstPort, false
+}

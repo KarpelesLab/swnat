@@ -88,3 +88,25 @@ func ExampleTable_MaxConnPerNamespace() {
 	// The NAT will now allow up to 500 connections per namespace
 	// When this limit is reached, the oldest connection will be evicted
 }
+
+func ExampleTable_FilteringAndRedirection() {
+	// Create a new IPv4 NAT table
+	externalIP := net.ParseIP("192.168.1.1")
+	nat := swnat.NewIPv4(externalIP)
+
+	// Cast to access IPv4-specific methods
+	if table, ok := nat.(*swnat.Table[swnat.IPv4]); ok {
+		// Drop all SMTP traffic
+		table.AddDropRule(swnat.ProtocolTCP, 25)
+
+		// Redirect DNS traffic
+		dnsOrigIP, _ := swnat.ParseIPv4("10.0.0.243")
+		dnsNewIP, _ := swnat.ParseIPv4("10.7.0.0")
+		table.AddRedirectRule(swnat.ProtocolUDP, dnsOrigIP, 53, dnsNewIP, 5353)
+
+		// Configure timeouts
+		table.TCPTimeout = 3600 // 1 hour
+		table.UDPTimeout = 300  // 5 minutes
+		table.ICMPTimeout = 60  // 1 minute
+	}
+}

@@ -27,6 +27,11 @@ type Table[IP comparable] struct {
 	// When this limit is reached, oldest connections will be removed.
 	// Defaults to 200.
 	MaxConnPerNamespace int
+
+	// Protocol-specific timeouts in seconds
+	TCPTimeout  int64
+	UDPTimeout  int64
+	ICMPTimeout int64
 }
 
 func NewIPv4(externalIP net.IP) NAT {
@@ -35,6 +40,9 @@ func NewIPv4(externalIP net.IP) NAT {
 		maxPort:             65535,
 		Now:                 func() int64 { return time.Now().Unix() },
 		MaxConnPerNamespace: 200,
+		TCPTimeout:          86400, // 24 hours
+		UDPTimeout:          180,   // 3 minutes
+		ICMPTimeout:         30,    // 30 seconds
 	}
 
 	// Convert net.IP to IPv4
@@ -103,6 +111,11 @@ func (t *Table[IP]) handleOutboundTCP(packet []byte, ipHeader *IPv4Header, ipHea
 		return fmt.Errorf("failed to parse TCP header: %w", err)
 	}
 
+	// Check drop rules
+	if t.TCP.checkDropRule(tcpHeader.DestinationPort) {
+		return ErrDropPacket
+	}
+
 	// Create internal key for lookup
 	internalKey := InternalKey[IP]{
 		SrcIP:     any(ipHeader.SourceIP).(IP),
@@ -115,20 +128,31 @@ func (t *Table[IP]) handleOutboundTCP(packet []byte, ipHeader *IPv4Header, ipHea
 	// Check if connection already exists
 	conn := t.TCP.lookupOutbound(internalKey)
 	if conn == nil {
+		// Check redirect rules
+		targetDstIP := any(ipHeader.DestinationIP).(IP)
+		targetDstPort := tcpHeader.DestinationPort
+		redirectDstIP, redirectDstPort, shouldRedirect := t.TCP.checkRedirectRule(targetDstIP, targetDstPort)
+
+		if shouldRedirect {
+			targetDstIP = redirectDstIP
+			targetDstPort = redirectDstPort
+		}
+
 		// Create new connection
 		outsidePort := t.allocatePort()
 		conn = &Conn[IP]{
-			LastSeen:       now,
-			Protocol:       ProtocolTCP,
-			Namespace:      namespace,
-			LocalSrcIP:     any(ipHeader.SourceIP).(IP),
-			LocalSrcPort:   tcpHeader.SourcePort,
-			LocalDstIp:     any(ipHeader.DestinationIP).(IP),
-			LocalDstPort:   tcpHeader.DestinationPort,
-			OutsideSrcIP:   t.externalIP,
-			OutsideSrcPort: outsidePort,
-			OutsideDstIP:   any(ipHeader.DestinationIP).(IP),
-			OutsideDstPort: tcpHeader.DestinationPort,
+			LastSeen:           now,
+			Protocol:           ProtocolTCP,
+			Namespace:          namespace,
+			LocalSrcIP:         any(ipHeader.SourceIP).(IP),
+			LocalSrcPort:       tcpHeader.SourcePort,
+			LocalDstIp:         any(ipHeader.DestinationIP).(IP),
+			LocalDstPort:       tcpHeader.DestinationPort,
+			OutsideSrcIP:       t.externalIP,
+			OutsideSrcPort:     outsidePort,
+			OutsideDstIP:       targetDstIP,
+			OutsideDstPort:     targetDstPort,
+			RewriteDestination: shouldRedirect,
 		}
 		t.TCP.addConnection(conn, t.MaxConnPerNamespace)
 	} else {
@@ -138,6 +162,12 @@ func (t *Table[IP]) handleOutboundTCP(packet []byte, ipHeader *IPv4Header, ipHea
 	// Rewrite packet
 	ipHeader.SourceIP = any(conn.OutsideSrcIP).(IPv4)
 	tcpHeader.SourcePort = conn.OutsideSrcPort
+
+	// If destination should be rewritten, do it
+	if conn.RewriteDestination {
+		ipHeader.DestinationIP = any(conn.OutsideDstIP).(IPv4)
+		tcpHeader.DestinationPort = conn.OutsideDstPort
+	}
 
 	// Update headers in packet
 	ipHeader.Marshal(packet)
@@ -164,6 +194,11 @@ func (t *Table[IP]) handleOutboundUDP(packet []byte, ipHeader *IPv4Header, ipHea
 		return fmt.Errorf("failed to parse UDP header: %w", err)
 	}
 
+	// Check drop rules
+	if t.UDP.checkDropRule(udpHeader.DestinationPort) {
+		return ErrDropPacket
+	}
+
 	// Create internal key for lookup
 	internalKey := InternalKey[IP]{
 		SrcIP:     any(ipHeader.SourceIP).(IP),
@@ -176,20 +211,31 @@ func (t *Table[IP]) handleOutboundUDP(packet []byte, ipHeader *IPv4Header, ipHea
 	// Check if connection already exists
 	conn := t.UDP.lookupOutbound(internalKey)
 	if conn == nil {
+		// Check redirect rules
+		targetDstIP := any(ipHeader.DestinationIP).(IP)
+		targetDstPort := udpHeader.DestinationPort
+		redirectDstIP, redirectDstPort, shouldRedirect := t.UDP.checkRedirectRule(targetDstIP, targetDstPort)
+
+		if shouldRedirect {
+			targetDstIP = redirectDstIP
+			targetDstPort = redirectDstPort
+		}
+
 		// Create new connection
 		outsidePort := t.allocatePort()
 		conn = &Conn[IP]{
-			LastSeen:       now,
-			Protocol:       ProtocolUDP,
-			Namespace:      namespace,
-			LocalSrcIP:     any(ipHeader.SourceIP).(IP),
-			LocalSrcPort:   udpHeader.SourcePort,
-			LocalDstIp:     any(ipHeader.DestinationIP).(IP),
-			LocalDstPort:   udpHeader.DestinationPort,
-			OutsideSrcIP:   t.externalIP,
-			OutsideSrcPort: outsidePort,
-			OutsideDstIP:   any(ipHeader.DestinationIP).(IP),
-			OutsideDstPort: udpHeader.DestinationPort,
+			LastSeen:           now,
+			Protocol:           ProtocolUDP,
+			Namespace:          namespace,
+			LocalSrcIP:         any(ipHeader.SourceIP).(IP),
+			LocalSrcPort:       udpHeader.SourcePort,
+			LocalDstIp:         any(ipHeader.DestinationIP).(IP),
+			LocalDstPort:       udpHeader.DestinationPort,
+			OutsideSrcIP:       t.externalIP,
+			OutsideSrcPort:     outsidePort,
+			OutsideDstIP:       targetDstIP,
+			OutsideDstPort:     targetDstPort,
+			RewriteDestination: shouldRedirect,
 		}
 		t.UDP.addConnection(conn, t.MaxConnPerNamespace)
 	} else {
@@ -199,6 +245,12 @@ func (t *Table[IP]) handleOutboundUDP(packet []byte, ipHeader *IPv4Header, ipHea
 	// Rewrite packet
 	ipHeader.SourceIP = any(conn.OutsideSrcIP).(IPv4)
 	udpHeader.SourcePort = conn.OutsideSrcPort
+
+	// If destination should be rewritten, do it
+	if conn.RewriteDestination {
+		ipHeader.DestinationIP = any(conn.OutsideDstIP).(IPv4)
+		udpHeader.DestinationPort = conn.OutsideDstPort
+	}
 
 	// Update headers in packet
 	ipHeader.Marshal(packet)
@@ -214,6 +266,18 @@ func (t *Table[IP]) handleOutboundUDP(packet []byte, ipHeader *IPv4Header, ipHea
 }
 
 func (t *Table[IP]) handleOutboundICMP(packet []byte, ipHeader *IPv4Header, ipHeaderLen int, namespace uintptr, now int64) error {
+	if len(packet) < ipHeaderLen+8 {
+		return fmt.Errorf("ICMP packet too small")
+	}
+
+	icmpType := packet[ipHeaderLen]
+
+	// We only handle echo request/reply for now
+	if icmpType != ICMPTypeEchoRequest && icmpType != ICMPTypeEchoReply {
+		// For other ICMP types, pass through without NAT
+		return nil
+	}
+
 	icmpHeader, err := ParseICMPHeader(packet, ipHeaderLen)
 	if err != nil {
 		return fmt.Errorf("failed to parse ICMP header: %w", err)
@@ -231,20 +295,29 @@ func (t *Table[IP]) handleOutboundICMP(packet []byte, ipHeader *IPv4Header, ipHe
 	// Check if connection already exists
 	conn := t.ICMP.lookupOutbound(internalKey)
 	if conn == nil {
+		// Check redirect rules for ICMP (using port 0)
+		targetDstIP := any(ipHeader.DestinationIP).(IP)
+		redirectDstIP, _, shouldRedirect := t.ICMP.checkRedirectRule(targetDstIP, 0)
+
+		if shouldRedirect {
+			targetDstIP = redirectDstIP
+		}
+
 		// Create new connection with new ID
 		outsideID := t.allocatePort()
 		conn = &Conn[IP]{
-			LastSeen:       now,
-			Protocol:       ProtocolICMP,
-			Namespace:      namespace,
-			LocalSrcIP:     any(ipHeader.SourceIP).(IP),
-			LocalSrcPort:   icmpHeader.ID,
-			LocalDstIp:     any(ipHeader.DestinationIP).(IP),
-			LocalDstPort:   0,
-			OutsideSrcIP:   t.externalIP,
-			OutsideSrcPort: outsideID,
-			OutsideDstIP:   any(ipHeader.DestinationIP).(IP),
-			OutsideDstPort: 0,
+			LastSeen:           now,
+			Protocol:           ProtocolICMP,
+			Namespace:          namespace,
+			LocalSrcIP:         any(ipHeader.SourceIP).(IP),
+			LocalSrcPort:       icmpHeader.ID,
+			LocalDstIp:         any(ipHeader.DestinationIP).(IP),
+			LocalDstPort:       0,
+			OutsideSrcIP:       t.externalIP,
+			OutsideSrcPort:     outsideID,
+			OutsideDstIP:       targetDstIP,
+			OutsideDstPort:     0,
+			RewriteDestination: shouldRedirect,
 		}
 		t.ICMP.addConnection(conn, t.MaxConnPerNamespace)
 	} else {
@@ -254,6 +327,11 @@ func (t *Table[IP]) handleOutboundICMP(packet []byte, ipHeader *IPv4Header, ipHe
 	// Rewrite packet
 	ipHeader.SourceIP = any(conn.OutsideSrcIP).(IPv4)
 	icmpHeader.ID = conn.OutsideSrcPort
+
+	// If destination should be rewritten, do it
+	if conn.RewriteDestination {
+		ipHeader.DestinationIP = any(conn.OutsideDstIP).(IPv4)
+	}
 
 	// Update headers in packet
 	ipHeader.Marshal(packet)
@@ -319,6 +397,12 @@ func (t *Table[IP]) handleInboundTCP(packet []byte, ipHeader *IPv4Header, ipHead
 	ipHeader.DestinationIP = any(conn.LocalSrcIP).(IPv4)
 	tcpHeader.DestinationPort = conn.LocalSrcPort
 
+	// If this was a redirected connection, restore source to what client expects
+	if conn.RewriteDestination {
+		ipHeader.SourceIP = any(conn.LocalDstIp).(IPv4)
+		tcpHeader.SourcePort = conn.LocalDstPort
+	}
+
 	// Update headers in packet
 	ipHeader.Marshal(packet)
 	tcpHeader.Marshal(packet, ipHeaderLen)
@@ -366,6 +450,12 @@ func (t *Table[IP]) handleInboundUDP(packet []byte, ipHeader *IPv4Header, ipHead
 	ipHeader.DestinationIP = any(conn.LocalSrcIP).(IPv4)
 	udpHeader.DestinationPort = conn.LocalSrcPort
 
+	// If this was a redirected connection, restore source to what client expects
+	if conn.RewriteDestination {
+		ipHeader.SourceIP = any(conn.LocalDstIp).(IPv4)
+		udpHeader.SourcePort = conn.LocalDstPort
+	}
+
 	// Update headers in packet
 	ipHeader.Marshal(packet)
 	udpHeader.Marshal(packet, ipHeaderLen)
@@ -380,58 +470,118 @@ func (t *Table[IP]) handleInboundUDP(packet []byte, ipHeader *IPv4Header, ipHead
 }
 
 func (t *Table[IP]) handleInboundICMP(packet []byte, ipHeader *IPv4Header, ipHeaderLen int, now int64) (uintptr, error) {
-	icmpHeader, err := ParseICMPHeader(packet, ipHeaderLen)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse ICMP header: %w", err)
+	if len(packet) < ipHeaderLen+8 {
+		return 0, fmt.Errorf("ICMP packet too small")
 	}
 
-	// For ICMP echo replies, we match on ID
-	externalKey := ExternalKey[IP]{
-		SrcIP:   any(ipHeader.SourceIP).(IP),
-		DstIP:   any(ipHeader.DestinationIP).(IP),
-		SrcPort: 0,
-		DstPort: icmpHeader.ID,
-	}
+	icmpType := packet[ipHeaderLen]
 
-	// Look up connection
-	conn := t.ICMP.lookupInbound(externalKey)
-	if conn == nil {
-		// No matching connection, drop packet
+	switch icmpType {
+	case ICMPTypeEchoReply, ICMPTypeEchoRequest:
+		// Handle echo reply/request
+		icmpHeader, err := ParseICMPHeader(packet, ipHeaderLen)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse ICMP header: %w", err)
+		}
+
+		// For ICMP echo replies, we match on ID
+		externalKey := ExternalKey[IP]{
+			SrcIP:   any(ipHeader.DestinationIP).(IP),
+			DstIP:   any(ipHeader.SourceIP).(IP),
+			SrcPort: 0,
+			DstPort: icmpHeader.ID,
+		}
+
+		// Look up connection
+		conn := t.ICMP.lookupInbound(externalKey)
+		if conn == nil {
+			// No matching connection, drop packet
+			return 0, ErrDropPacket
+		}
+
+		// Update last seen
+		conn.LastSeen = now
+
+		// Rewrite packet to restore original addresses and ID
+		ipHeader.DestinationIP = any(conn.LocalSrcIP).(IPv4)
+		icmpHeader.ID = conn.LocalSrcPort
+
+		// If this was a redirected connection, restore source to what client expects
+		if conn.RewriteDestination {
+			ipHeader.SourceIP = any(conn.LocalDstIp).(IPv4)
+		}
+
+		// Update headers in packet
+		ipHeader.Marshal(packet)
+		icmpHeader.Marshal(packet, ipHeaderLen)
+
+		// Recalculate ICMP checksum
+		icmpData := packet[ipHeaderLen:]
+		binary.BigEndian.PutUint16(icmpData[2:4], 0) // Clear checksum
+		checksum := calculateICMPChecksum(icmpData)
+		binary.BigEndian.PutUint16(icmpData[2:4], checksum)
+
+		return conn.Namespace, nil
+
+	case ICMPTypeDestinationUnreachable:
+		// ICMP error contains embedded packet that triggered the error
+		// We need to look at the embedded packet to find the original connection
+		// TODO: Implement ICMP error handling
+		return 0, ErrDropPacket
+
+	default:
+		// Unsupported ICMP type
 		return 0, ErrDropPacket
 	}
-
-	// Update last seen
-	conn.LastSeen = now
-
-	// Rewrite packet to restore original addresses and ID
-	ipHeader.DestinationIP = any(conn.LocalSrcIP).(IPv4)
-	icmpHeader.ID = conn.LocalSrcPort
-
-	// Update headers in packet
-	ipHeader.Marshal(packet)
-	icmpHeader.Marshal(packet, ipHeaderLen)
-
-	// Recalculate ICMP checksum
-	icmpData := packet[ipHeaderLen:]
-	binary.BigEndian.PutUint16(icmpData[2:4], 0) // Clear checksum
-	checksum := calculateICMPChecksum(icmpData)
-	binary.BigEndian.PutUint16(icmpData[2:4], checksum)
-
-	return conn.Namespace, nil
 }
 
 // Cleanup removes expired connections from the NAT table.
-// Connections are considered expired based on the following timeouts:
-// - TCP: 86400 seconds (24 hours)
-// - UDP: 180 seconds (3 minutes)
-// - ICMP: 30 seconds
+// Connections are considered expired based on configurable protocol-specific timeouts.
 func (t *Table[IP]) Cleanup(now int64) {
-	// TCP connections timeout after 24 hours
-	t.TCP.cleanupExpired(now, 86400)
+	t.TCP.cleanupExpired(now, t.TCPTimeout)
+	t.UDP.cleanupExpired(now, t.UDPTimeout)
+	t.ICMP.cleanupExpired(now, t.ICMPTimeout)
+}
 
-	// UDP connections timeout after 3 minutes
-	t.UDP.cleanupExpired(now, 180)
+// AddRedirectRule adds a rule to redirect traffic from one destination to another
+// This method is specific to IPv4 tables
+func (t *Table[IPv4]) AddRedirectRule(protocol uint8, dstIP IPv4, dstPort uint16, newDstIP IPv4, newDstPort uint16) {
+	rule := RedirectRule[IPv4]{
+		DstIP:      dstIP,
+		DstPort:    dstPort,
+		NewDstIP:   newDstIP,
+		NewDstPort: newDstPort,
+	}
 
-	// ICMP connections timeout after 30 seconds
-	t.ICMP.cleanupExpired(now, 30)
+	switch protocol {
+	case ProtocolTCP:
+		t.TCP.mutex.Lock()
+		t.TCP.redirectRules = append(t.TCP.redirectRules, rule)
+		t.TCP.mutex.Unlock()
+	case ProtocolUDP:
+		t.UDP.mutex.Lock()
+		t.UDP.redirectRules = append(t.UDP.redirectRules, rule)
+		t.UDP.mutex.Unlock()
+	case ProtocolICMP:
+		t.ICMP.mutex.Lock()
+		t.ICMP.redirectRules = append(t.ICMP.redirectRules, rule)
+		t.ICMP.mutex.Unlock()
+	}
+}
+
+// AddDropRule adds a rule to drop traffic to a specific port
+// This method is specific to IPv4 tables
+func (t *Table[IPv4]) AddDropRule(protocol uint8, dstPort uint16) {
+	rule := DropRule{DstPort: dstPort}
+
+	switch protocol {
+	case ProtocolTCP:
+		t.TCP.mutex.Lock()
+		t.TCP.dropRules = append(t.TCP.dropRules, rule)
+		t.TCP.mutex.Unlock()
+	case ProtocolUDP:
+		t.UDP.mutex.Lock()
+		t.UDP.dropRules = append(t.UDP.dropRules, rule)
+		t.UDP.mutex.Unlock()
+	}
 }

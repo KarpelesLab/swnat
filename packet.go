@@ -17,6 +17,11 @@ const (
 	TCPFlagPSH = 0x08
 	TCPFlagACK = 0x10
 	TCPFlagURG = 0x20
+
+	// ICMP types
+	ICMPTypeEchoReply              = 0
+	ICMPTypeDestinationUnreachable = 3
+	ICMPTypeEchoRequest            = 8
 )
 
 type IPv4Header struct {

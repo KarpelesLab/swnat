@@ -43,12 +43,23 @@ type InternalKey[IP comparable] struct {
 	Namespace        uintptr
 }
 
+// RedirectRule defines a rule for redirecting traffic
+type RedirectRule[IP comparable] struct {
+	DstIP      IP
+	DstPort    uint16
+	NewDstIP   IP
+	NewDstPort uint16
+}
+
+// DropRule defines a rule for dropping traffic to specific ports
+type DropRule struct {
+	DstPort uint16
+}
+
 type Pair[IP comparable] struct {
-	mutex sync.RWMutex
-	in    map[ExternalKey[IP]]*Conn[IP]
-	out   map[InternalKey[IP]]*Conn[IP]
-	// TODO implementation for rules
-	// A rule should allow packets to a specific destination to be either rewritten (redirect) or dropped (filter)
-	// We might want rules that target only a specific port (for example drop all packets to tcp port 25)
-	//outRules map[ExternalKey[IP]]...
+	mutex         sync.RWMutex
+	in            map[ExternalKey[IP]]*Conn[IP]
+	out           map[InternalKey[IP]]*Conn[IP]
+	redirectRules []RedirectRule[IP]
+	dropRules     []DropRule
 }
