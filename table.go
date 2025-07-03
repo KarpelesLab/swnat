@@ -18,12 +18,17 @@ type Table[IP comparable] struct {
 	portCounter uint32
 	nextPort    uint32
 	maxPort     uint32
+
+	// Now is a function that returns the current time in Unix seconds.
+	// Defaults to time.Now().Unix() but can be overridden for performance.
+	Now func() int64
 }
 
 func NewIPv4(externalIP net.IP) NAT {
 	t := &Table[IPv4]{
 		nextPort: 49152,
 		maxPort:  65535,
+		Now:      func() int64 { return time.Now().Unix() },
 	}
 
 	// Convert net.IP to IPv4
@@ -71,7 +76,7 @@ func (t *Table[IP]) HandleOutboundPacket(packet []byte, namespace uintptr) error
 	}
 
 	headerLen := int(ipHeader.IHL) * 4
-	now := uint32(time.Now().Unix())
+	now := t.Now()
 
 	switch ipHeader.Protocol {
 	case ProtocolTCP:
@@ -86,7 +91,7 @@ func (t *Table[IP]) HandleOutboundPacket(packet []byte, namespace uintptr) error
 	}
 }
 
-func (t *Table[IP]) handleOutboundTCP(packet []byte, ipHeader *IPv4Header, ipHeaderLen int, namespace uintptr, now uint32) error {
+func (t *Table[IP]) handleOutboundTCP(packet []byte, ipHeader *IPv4Header, ipHeaderLen int, namespace uintptr, now int64) error {
 	tcpHeader, err := ParseTCPHeader(packet, ipHeaderLen)
 	if err != nil {
 		return fmt.Errorf("failed to parse TCP header: %w", err)
@@ -141,7 +146,7 @@ func (t *Table[IP]) handleOutboundTCP(packet []byte, ipHeader *IPv4Header, ipHea
 	return nil
 }
 
-func (t *Table[IP]) handleOutboundUDP(packet []byte, ipHeader *IPv4Header, ipHeaderLen int, namespace uintptr, now uint32) error {
+func (t *Table[IP]) handleOutboundUDP(packet []byte, ipHeader *IPv4Header, ipHeaderLen int, namespace uintptr, now int64) error {
 	udpHeader, err := ParseUDPHeader(packet, ipHeaderLen)
 	if err != nil {
 		return fmt.Errorf("failed to parse UDP header: %w", err)
@@ -196,7 +201,7 @@ func (t *Table[IP]) handleOutboundUDP(packet []byte, ipHeader *IPv4Header, ipHea
 	return nil
 }
 
-func (t *Table[IP]) handleOutboundICMP(packet []byte, ipHeader *IPv4Header, ipHeaderLen int, namespace uintptr, now uint32) error {
+func (t *Table[IP]) handleOutboundICMP(packet []byte, ipHeader *IPv4Header, ipHeaderLen int, namespace uintptr, now int64) error {
 	icmpHeader, err := ParseICMPHeader(packet, ipHeaderLen)
 	if err != nil {
 		return fmt.Errorf("failed to parse ICMP header: %w", err)
@@ -259,7 +264,7 @@ func (t *Table[IP]) HandleInboundPacket(packet []byte) (uintptr, error) {
 	}
 
 	headerLen := int(ipHeader.IHL) * 4
-	now := uint32(time.Now().Unix())
+	now := t.Now()
 
 	switch ipHeader.Protocol {
 	case ProtocolTCP:
@@ -274,7 +279,7 @@ func (t *Table[IP]) HandleInboundPacket(packet []byte) (uintptr, error) {
 	}
 }
 
-func (t *Table[IP]) handleInboundTCP(packet []byte, ipHeader *IPv4Header, ipHeaderLen int, now uint32) (uintptr, error) {
+func (t *Table[IP]) handleInboundTCP(packet []byte, ipHeader *IPv4Header, ipHeaderLen int, now int64) (uintptr, error) {
 	tcpHeader, err := ParseTCPHeader(packet, ipHeaderLen)
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse TCP header: %w", err)
@@ -315,7 +320,7 @@ func (t *Table[IP]) handleInboundTCP(packet []byte, ipHeader *IPv4Header, ipHead
 	return conn.Namespace, nil
 }
 
-func (t *Table[IP]) handleInboundUDP(packet []byte, ipHeader *IPv4Header, ipHeaderLen int, now uint32) (uintptr, error) {
+func (t *Table[IP]) handleInboundUDP(packet []byte, ipHeader *IPv4Header, ipHeaderLen int, now int64) (uintptr, error) {
 	udpHeader, err := ParseUDPHeader(packet, ipHeaderLen)
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse UDP header: %w", err)
@@ -356,7 +361,7 @@ func (t *Table[IP]) handleInboundUDP(packet []byte, ipHeader *IPv4Header, ipHead
 	return conn.Namespace, nil
 }
 
-func (t *Table[IP]) handleInboundICMP(packet []byte, ipHeader *IPv4Header, ipHeaderLen int, now uint32) (uintptr, error) {
+func (t *Table[IP]) handleInboundICMP(packet []byte, ipHeader *IPv4Header, ipHeaderLen int, now int64) (uintptr, error) {
 	icmpHeader, err := ParseICMPHeader(packet, ipHeaderLen)
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse ICMP header: %w", err)
@@ -395,4 +400,20 @@ func (t *Table[IP]) handleInboundICMP(packet []byte, ipHeader *IPv4Header, ipHea
 	binary.BigEndian.PutUint16(icmpData[2:4], checksum)
 
 	return conn.Namespace, nil
+}
+
+// Cleanup removes expired connections from the NAT table.
+// Connections are considered expired based on the following timeouts:
+// - TCP: 86400 seconds (24 hours)
+// - UDP: 180 seconds (3 minutes)
+// - ICMP: 30 seconds
+func (t *Table[IP]) Cleanup(now int64) {
+	// TCP connections timeout after 24 hours
+	t.TCP.cleanupExpired(now, 86400)
+
+	// UDP connections timeout after 3 minutes
+	t.UDP.cleanupExpired(now, 180)
+
+	// ICMP connections timeout after 30 seconds
+	t.ICMP.cleanupExpired(now, 30)
 }

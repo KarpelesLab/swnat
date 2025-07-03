@@ -13,6 +13,8 @@ A pure Go implementation of a software NAT (Network Address Translation) engine 
 - Thread-safe connection management
 - Automatic port allocation for outbound connections
 - Packet checksum recalculation
+- Configurable time source for performance optimization
+- Automatic cleanup of expired connections
 
 ## Installation
 
@@ -28,6 +30,8 @@ package main
 import (
     "log"
     "net"
+    "time"
+    "sync/atomic"
     "github.com/KarpelesLab/swnat"
 )
 
@@ -65,6 +69,34 @@ func main() {
     
     // Route packet back to the correct namespace
     routeToNamespace(inboundPacket, returnNamespace)
+    
+    // Periodically cleanup expired connections
+    go func() {
+        ticker := time.NewTicker(60 * time.Second)
+        defer ticker.Stop()
+        for range ticker.C {
+            nat.Cleanup(time.Now().Unix())
+        }
+    }()
+}
+```
+
+### Performance Optimization
+
+For high-performance scenarios, you can override the time source:
+
+```go
+// Use a custom time source that updates less frequently
+var currentTime int64
+go func() {
+    for {
+        atomic.StoreInt64(&currentTime, time.Now().Unix())
+        time.Sleep(time.Second)
+    }
+}()
+
+if table, ok := nat.(*swnat.Table[swnat.IPv4]); ok {
+    table.Now = func() int64 { return atomic.LoadInt64(&currentTime) }
 }
 ```
 
@@ -84,6 +116,11 @@ func main() {
    - Returns the namespace identifier for proper routing
 
 3. **Connection Tracking**: The library maintains connection state for all active flows, allowing proper translation of return traffic.
+
+4. **Connection Cleanup**: Expired connections are removed based on protocol-specific timeouts:
+   - TCP: 24 hours
+   - UDP: 3 minutes  
+   - ICMP: 30 seconds
 
 ## Architecture
 

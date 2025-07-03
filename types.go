@@ -10,10 +10,11 @@ type (
 type NAT interface {
 	HandleOutboundPacket(packet []byte, namespace uintptr) error
 	HandleInboundPacket(packet []byte) (uintptr, error)
+	Cleanup(now int64)
 }
 
 type Conn[IP comparable] struct {
-	LastSeen  uint32
+	LastSeen  int64
 	Protocol  uint8 // ICMP, TCP, UDP
 	Namespace uintptr
 

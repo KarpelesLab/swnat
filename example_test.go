@@ -3,6 +3,7 @@ package swnat_test
 import (
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/KarpelesLab/swnat"
 )
@@ -42,4 +43,20 @@ func ExampleTable() {
 	}
 
 	fmt.Printf("Return packet belongs to namespace: %d\n", returnNamespace)
+}
+
+func ExampleTable_Cleanup() {
+	// Create a new IPv4 NAT table
+	externalIP := net.ParseIP("192.168.1.1")
+	nat := swnat.NewIPv4(externalIP)
+
+	// Perform regular cleanup of expired connections
+	currentTime := time.Now().Unix()
+	nat.Cleanup(currentTime)
+
+	// For performance optimization, you can provide a custom time source
+	if table, ok := nat.(*swnat.Table[swnat.IPv4]); ok {
+		// Use a cached time value that updates less frequently
+		table.Now = func() int64 { return currentTime }
+	}
 }

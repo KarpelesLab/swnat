@@ -65,7 +65,7 @@ func (p *Pair[IP]) removeConnection(conn *Conn[IP]) {
 	delete(p.in, externalKey)
 }
 
-func (p *Pair[IP]) cleanupExpired(now uint32, timeout uint32) {
+func (p *Pair[IP]) cleanupExpired(now int64, timeout int64) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
